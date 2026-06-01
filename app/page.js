@@ -19,19 +19,28 @@ const StatCard = ({ title, value, subtitle, color, icon }) => (
   </div>
 )
 
+const stageLabel = {
+  1: { label: 'Stage 1', color: '#6366f1' },
+  2: { label: 'Stage 2', color: '#3b82f6' },
+  3: { label: 'Stage 3', color: '#0ea5e9' },
+  4: { label: 'Stage 4', color: '#10b981' },
+  5: { label: 'Stage 5', color: '#f59e0b' },
+  6: { label: 'Stage 6', color: '#f97316' },
+  7: { label: 'Stage 7', color: '#ef4444' },
+}
+
 export default function Dashboard() {
-  const [stats, setStats]     = useState({ sent: 0, opened: 0, bounced: 0, replied: 0, blocked: 0 })
-  const [emails, setEmails]   = useState([])
-  const [filter, setFilter]   = useState('all')
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats]         = useState({ sent: 0, opened: 0, bounced: 0, replied: 0, blocked: 0 })
+  const [emails, setEmails]       = useState([])
+  const [filter, setFilter]       = useState('all')
+  const [stageFilter, setStageFilter] = useState('all')
+  const [loading, setLoading]     = useState(true)
   const [lastUpdated, setLastUpdated] = useState('')
 
   async function fetchData() {
     setLoading(true)
-
-    // Stats
     const { data: allEmails } = await supabase
-      .from('emails').select('status, sent_at, company, recipient_email, sent_from, tracking_id')
+      .from('emails').select('status, sent_at, company, recipient_email, sent_from, tracking_id, stage')
       .order('sent_at', { ascending: false })
       .limit(500)
 
@@ -51,11 +60,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 30000) // 30s auto refresh
+    const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 
-  const filtered = filter === 'all' ? emails : emails.filter(e => e.status === filter)
+  const filtered = emails
+    .filter(e => filter === 'all' || e.status === filter)
+    .filter(e => stageFilter === 'all' || String(e.stage) === stageFilter)
+
   const openRate = stats.sent > 0 ? ((stats.opened / stats.sent) * 100).toFixed(1) : 0
 
   const statusColor = {
@@ -103,8 +115,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {/* Status Filter Tabs */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
           {['all', 'sent', 'opened', 'bounced', 'replied', 'blocked'].map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
               background: filter === f ? (statusColor[f] || '#3b82f6') : '#1a1a2e',
@@ -120,40 +132,80 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* Stage Filter Tabs */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <button onClick={() => setStageFilter('all')} style={{
+            background: stageFilter === 'all' ? '#475569' : '#1a1a2e',
+            color: '#fff', border: '1px solid #475569',
+            borderRadius: '8px', padding: '5px 14px', cursor: 'pointer', fontSize: '12px'
+          }}>
+            📋 All Stages
+          </button>
+          {[1,2,3,4,5,6,7].map(s => {
+            const count = emails.filter(e => e.stage === s).length
+            if (count === 0) return null
+            return (
+              <button key={s} onClick={() => setStageFilter(String(s))} style={{
+                background: stageFilter === String(s) ? stageLabel[s].color : '#1a1a2e',
+                color: '#fff', border: `1px solid ${stageLabel[s].color}`,
+                borderRadius: '8px', padding: '5px 14px', cursor: 'pointer', fontSize: '12px'
+              }}>
+                Stage {s}
+                <span style={{ marginLeft: '6px', background: 'rgba(255,255,255,0.2)', borderRadius: '999px', padding: '1px 6px', fontSize: '11px' }}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
         {/* Email Table */}
         <div style={{ background: '#1a1a2e', borderRadius: '12px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#2a2a4a' }}>
-                {['Company', 'Email', 'Sent From', 'Status', 'Sent At'].map(h => (
+                {['Company', 'Email', 'Sent From', 'Stage', 'Status', 'Sent At'].map(h => (
                   <th key={h} style={{ padding: '12px 16px', textAlign: 'left', color: '#aaa', fontSize: '13px', fontWeight: '600' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading...</td></tr>
+                <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#888' }}>কোনো data নেই</td></tr>
-              ) : filtered.map((email, i) => (
-                <tr key={email.tracking_id} style={{ borderTop: '1px solid #2a2a4a', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '14px' }}>{email.company || '-'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#aaa' }}>{email.recipient_email}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', color: '#888' }}>{email.sent_from?.split('@')[0]}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      background: `${statusColor[email.status] || '#888'}22`,
-                      color: statusColor[email.status] || '#888',
-                      padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600'
-                    }}>
-                      {statusIcon[email.status]} {email.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', color: '#888' }}>
-                    {email.sent_at ? new Date(email.sent_at).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' }) : '-'}
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#888' }}>কোনো data নেই</td></tr>
+              ) : filtered.map((email, i) => {
+                const stage = email.stage || 1
+                const sl = stageLabel[stage] || stageLabel[1]
+                return (
+                  <tr key={email.tracking_id} style={{ borderTop: '1px solid #2a2a4a', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>{email.company || '-'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#aaa' }}>{email.recipient_email}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#888' }}>{email.sent_from?.split('@')[0]}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{
+                        background: `${sl.color}22`,
+                        color: sl.color,
+                        padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600'
+                      }}>
+                        {sl.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{
+                        background: `${statusColor[email.status] || '#888'}22`,
+                        color: statusColor[email.status] || '#888',
+                        padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '600'
+                      }}>
+                        {statusIcon[email.status]} {email.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#888' }}>
+                      {email.sent_at ? new Date(email.sent_at).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' }) : '-'}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
